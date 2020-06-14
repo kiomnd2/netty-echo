@@ -5,9 +5,9 @@ import io.netty.util.concurrent.EventExecutorGroup;
 
 import javax.swing.filechooser.FileSystemView;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 
 public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     @Override
@@ -19,17 +19,41 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
         System.out.println("command :: " + msg);
-        String response = "";
+        StringBuilder response = new StringBuilder();
 
 
         //
         if("list".equals(msg)) {
-
             File file = FileSystemView.getFileSystemView().getRoots()[0];
-            Files.walk(Paths.get(file.getPath()))
-                    .filter(Files::isRegularFile)
-                    .forEach(System.out::println);
+            Files.walkFileTree(Paths.get(file.getPath()), new SimpleFileVisitor<Path>(){
+                int cnt  = 0 ;
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+
+                    if(attrs.isRegularFile()) {
+                        if(cnt < 10000) {
+                            System.out.println(file);
+                            response.append(file).append("\n");
+                        } else {
+                            return FileVisitResult.TERMINATE;
+                        }
+                        cnt = cnt +1;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+            });
         }
+        System.out.println(response);
 
         ChannelFuture f = ctx.write(response);
 
